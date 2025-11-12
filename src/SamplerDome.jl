@@ -11,6 +11,7 @@ benchmarking framework to compare their performance.
 - FirstToFire: Optimized next reaction method
 - CombinedNextReaction: Hybrid approach combining multiple strategies
 - PSSACR: Composition-rejection sampling over groups (exponential distributions only)
+- RSSA: Rejection-based SSA with Fenwick tree (exponential distributions only)
 
 # Usage
 ```julia
@@ -54,6 +55,7 @@ include("firstreaction.jl")
 include("firsttofire.jl")
 include("combinednr.jl")
 include("pssa_cr.jl")
+include("rssa.jl")
 
 # Benchmarking framework
 include("conditions.jl")
@@ -65,6 +67,7 @@ export FirstReaction, ChatReaction
 export FirstToFire
 export CombinedNextReaction
 export PSSACR
+export RSSA
 
 # Export benchmarking utilities
 export BenchmarkCondition, generate_conditions, construct_samplers
