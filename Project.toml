@@ -1,0 +1,21 @@
+name = "SamplerDome"
+uuid = "8b2e4a9c-7f3d-4e5c-9a1b-2d3e4f5a6b7c"
+authors = ["Contributors"]
+version = "0.1.0"
+
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[compat]
+julia = "1.6"
+BenchmarkTools = "1"
+CSV = "0.10"
+DataFrames = "1"
+DataStructures = "0.18"
+Distributions = "0.25"
