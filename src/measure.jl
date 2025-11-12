@@ -9,6 +9,7 @@ import Base.Iterators: take, flatten
 Generate a descriptive, unique name for a sampler type.
 
 For DirectCall variants, extracts the Keep/Removal strategy and PrefixSearch type.
+For PSSACR, returns "PSSACR".
 For other samplers, returns the simple type name.
 """
 function sampler_name(sampler_type::Type)
@@ -35,6 +36,11 @@ function sampler_name(sampler_type::Type)
         end
 
         return "DirectCall_$(keep_strategy)_$(prefix_type)"
+    end
+
+    # For PSSACR, use simple name
+    if occursin("PSSACR", type_str)
+        return "PSSACR"
     end
 
     # For other samplers, use simple name

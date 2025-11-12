@@ -10,8 +10,48 @@
 # - Provide exact sampling of the next reaction and time: Δt ~ Exp(a0), reaction chosen via composition–rejection within groups.
 # - Be usable without reaction-network structure; optional manual grouping API is provided to recover PSSA-style efficiency when you have owner/group metadata.
 #
+# SIMPLIFICATIONS FROM THE ORIGINAL PSSA-CR ALGORITHM (Ramaswamy & Sbalzarini 2010):
+#
+# This implementation is a SIMPLIFIED, GENERAL-PURPOSE variant of PSSA-CR that trades some theoretical
+# performance guarantees for broader applicability:
+#
+# 1. NO TRUE PARTIAL PROPENSITIES:
+#    - Paper: Groups reactions by reactant species, factoring propensities as πμ(i) = nᵢ × cμ
+#      (partial propensity = population × rate constant)
+#    - Here: Groups generic "clocks" by hash value, stores full rates λ (not factored)
+#    - Impact: Works for any exponential process, not just chemical reactions with species counts
+#
+# 2. NO DYADIC BINNING:
+#    - Paper: Uses log₂(λmax/λmin)+1 bins per group for O(1) composition-rejection
+#    - Here: Uses LINEAR SEARCH over groups (lines 257-270)
+#    - Impact: Composition step is O(G) instead of O(log G), where G = number of groups
+#    - Trade-off: Simpler implementation, still efficient for moderate G (default 64)
+#
+# 3. NO DEPENDENCY GRAPH OVER SPECIES:
+#    - Paper: Maintains species dependency graph to update O(1) partial propensities for weakly-coupled networks
+#    - Here: No dependency tracking; each enable!/disable! only updates affected group
+#    - Impact: Update cost is O(1) per operation (not O(N) for strongly-coupled networks)
+#
+# 4. HASH-BASED GROUPING (NOT REACTION STRUCTURE):
+#    - Paper: Groups reactions by their reactant species (exploiting chemical network structure)
+#    - Here: Groups clocks by hash(clock_id) % ngroups
+#    - Impact: Grouping is general-purpose but may have worse rejection rates than structure-aware grouping
+#    - Mitigation: User can manually assign groups via assign_group!() if structure is known
+#
+# 5. THEORETICAL COMPLEXITY:
+#    - Paper PSSA-CR: O(1) per step for weakly-coupled, O(N) for strongly-coupled networks
+#    - This implementation: O(G) per step where G = ngroups (default 64)
+#    - Note: Since G is typically constant and small, this is effectively O(1) in practice
+#
+# WHEN TO USE THIS IMPLEMENTATION:
+# - ✓ General exponential processes (not just chemical reactions)
+# - ✓ Moderate number of groups (G ≤ 100 works well)
+# - ✓ When simplicity and code clarity matter
+# - ✗ Extremely large-scale chemical networks where true O(1) scaling is critical
+# - ✗ When you need absolute minimum rejection rate (use structure-aware grouping)
+#
 # Notes:
-# - This sampler keeps no per-clock scheduled times. It caches *only one* "next event" (time,key)
+# - This sampler keeps no per-clock scheduled times. It caches *only one* "next event" (time,clock)
 #   to make `next` idempotent until `fire!`, `enable!`, `disable!`, or `jitter!` invalidates it.
 # - Grouping: by default, clocks are hashed into a fixed number of groups. You can override the group
 #   assignment before enabling a clock via `assign_group!` for better acceptance behavior.
@@ -20,20 +60,8 @@
 # R. Ramaswamy & I. F. Sbalzarini, "A partial-propensity variant of the composition-rejection SSA", J. Chem. Phys. 132, 044102 (2010).
 # A. Slepoy, A. P. Thompson, S. J. Plimpton, "A constant-time kinetic Monte Carlo algorithm...", J. Chem. Phys. 128, 205101 (2008).
 #
-module PSSACRSampler
-
-using Random
-using Distributions
 
 export PSSACR
-
-# Forward declare OrderedSample, SSA supertype come from the host framework.
-# We only *use* the type names to match method signatures.
-# If OrderedSample is not available at load time, these methods will still compile,
-# provided the host defines them before calling.
-# 
-# Expected constructors used here:
-#   OrderedSample{K,T}(key::K, time::T)
 
 """
     PSSACR{KeyType,TimeType}(; ngroups::Int=64)
@@ -49,12 +77,12 @@ Assumptions:
   proposal with acceptance `λ/λ_max_group`.
 
 Interface compatibility:
-- `next` is idempotent: it caches one upcoming `(time,key)` until invalidated by `fire!`,
+- `next` is idempotent: it caches one upcoming `(time,clock)` until invalidated by `fire!`,
   `enable!`, `disable!`, or `jitter!`.
 
 Performance notes:
 - Choose `ngroups` so that groups remain small and rate magnitudes similar.
-  If you possess “owner” metadata (partial-propensity style), call `assign_group!`
+  If you possess "owner" metadata (partial-propensity style), call `assign_group!`
   *before* `enable!` to place clocks with common owners into the same group.
 """
 mutable struct PSSACR{K,T} <: SSA{K,T}
@@ -88,8 +116,10 @@ function PSSACR{K,T}(; ngroups::Int=64) where {K,T}
     )
 end
 
-# Shallow clone of structure (no clocks)
-clone(::PSSACR{K,T}) where {K,T} = PSSACR{K,T}()
+# Shallow clone of structure (no clocks), preserving ngroups
+function clone(s::PSSACR{K,T}) where {K,T}
+    PSSACR{K,T}(ngroups=length(s.groups))
+end
 
 # Reset all internal state
 function reset!(s::PSSACR{K,T}) where {K,T}
@@ -108,6 +138,11 @@ end
 
 # Deep copy clocks and statistics from src into dst
 function copy_clocks!(dst::PSSACR{K,T}, src::PSSACR{K,T}) where {K,T}
+    # Validate matching structure
+    if length(dst.groups) != length(src.groups)
+        throw(ArgumentError("copy_clocks!: destination has $(length(dst.groups)) groups but source has $(length(src.groups))"))
+    end
+
     dst.rates = copy(src.rates)
     dst.group_of = copy(src.group_of)
     dst.pos_in_group = copy(src.pos_in_group)
@@ -116,7 +151,7 @@ function copy_clocks!(dst::PSSACR{K,T}, src::PSSACR{K,T}) where {K,T}
     dst.group_max = copy(src.group_max)
     dst.total_rate = src.total_rate
     dst.cached_next = src.cached_next === nothing ? nothing :
-        OrderedSample{K,T}(getfield(src.cached_next, :key), getfield(src.cached_next, :time))
+        OrderedSample{K,T}(getfield(src.cached_next, :clock), getfield(src.cached_next, :time))
     return dst
 end
 
@@ -183,13 +218,12 @@ function enable!(s::PSSACR{K,T},
                  te::T,
                  when::T,
                  rng::AbstractRNG) where {K,T}
-    λ::T
-    if distribution isa Exponential
-        # Distributions.jl: Exponential(θ) has rate 1/θ
-        λ = convert(T, rate(distribution))
-    else
+    if !(distribution isa Exponential)
         throw(ArgumentError("PSSACR only supports Exponential distributions (got $(typeof(distribution)))."))
     end
+
+    # Distributions.jl: Exponential(θ) has rate 1/θ
+    λ = convert(T, rate(distribution))
 
     if haskey(s.rates, clock)
         _update_rate!(s, clock, λ)
@@ -237,12 +271,12 @@ function fire!(s::PSSACR{K,T}, clock::K, when::T) where {K,T}
     return s
 end
 
-# Required interface: compute (time, key) of the next event WITHOUT removing it.
+# Required interface: compute (time, clock) of the next event WITHOUT removing it.
 function next(s::PSSACR{K,T}, when::T, rng::AbstractRNG) where {K,T}
     # If cached, return it.
     if s.cached_next !== nothing
         t = getfield(s.cached_next, :time)
-        k = getfield(s.cached_next, :key)
+        k = getfield(s.cached_next, :clock)
         return (t, k)
     end
 
@@ -308,7 +342,7 @@ end
 # Here we only cache the *single* next event. We return its time iff it belongs to `clock`.
 function Base.getindex(s::PSSACR{K,T}, clock::K) where {K,T}
     s.cached_next === nothing && throw(KeyError(clock))
-    key = getfield(s.cached_next, :key)
+    key = getfield(s.cached_next, :clock)
     if key == clock
         return getfield(s.cached_next, :time)
     else
@@ -327,5 +361,3 @@ Base.haskey(::PSSACR{K,T}, ::Any) where {K,T} = false
 
 enabled(s::PSSACR) = collect(Base.keys(s.rates))
 isenabled(s::PSSACR{K,T}, clock::K) where {K,T} = haskey(s.rates, clock)
-
-end # module
