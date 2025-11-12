@@ -10,6 +10,7 @@ benchmarking framework to compare their performance.
 - FirstReaction: Classic first reaction method
 - FirstToFire: Optimized next reaction method
 - CombinedNextReaction: Hybrid approach combining multiple strategies
+- PSSACR: Composition-rejection sampling over groups (exponential distributions only)
 
 # Usage
 ```julia
@@ -52,6 +53,7 @@ include("direct.jl")
 include("firstreaction.jl")
 include("firsttofire.jl")
 include("combinednr.jl")
+include("pssa_cr.jl")
 
 # Benchmarking framework
 include("conditions.jl")
@@ -62,6 +64,7 @@ export DirectCall, DirectCallExplicit
 export FirstReaction, ChatReaction
 export FirstToFire
 export CombinedNextReaction
+export PSSACR
 
 # Export benchmarking utilities
 export BenchmarkCondition, generate_conditions, construct_samplers

@@ -23,7 +23,8 @@ function construct_samplers()
         DirectCallExplicit(K, T, KeyedRemovalPrefixSearch, CumSumPrefixSearch),
         DirectCallExplicit(K, T, KeyedKeepPrefixSearch, CumSumPrefixSearch),
         FirstReaction{K,T}(),
-        CombinedNextReaction{K,T}()
+        CombinedNextReaction{K,T}(),
+        PSSACR{K,T}(ngroups=64)
     ]
 end
 
@@ -41,13 +42,18 @@ end
 """
 Check if a sampler type is compatible with a given condition.
 
-DirectCall only works with exponential distributions.
+DirectCall and PSSACR only work with exponential distributions.
 """
 function is_compatible(sampler_type::Type, cond::BenchmarkCondition)
     # DirectCall variants can only handle exponential distributions
     # Check type name starts with "DirectCall" to catch all variants
     type_name = string(nameof(sampler_type))
     if startswith(type_name, "DirectCall") && cond.distributions != :exponential
+        return false
+    end
+
+    # PSSACR also only works with exponential distributions
+    if startswith(type_name, "PSSACR") && cond.distributions != :exponential
         return false
     end
 
