@@ -13,12 +13,12 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Julia 1.10.7 (latest stable as of 2025)
-ENV JULIA_VERSION=1.10.7
+# Install Julia 1.12.1 (latest stable as of 2025)
+ENV JULIA_VERSION=1.12.1
 ENV JULIA_PATH=/opt/julia
 ENV PATH="${JULIA_PATH}/bin:${PATH}"
 
-RUN wget -q https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-${JULIA_VERSION}-linux-x86_64.tar.gz && \
+RUN wget -q https://julialang-s3.julialang.org/bin/linux/x64/1.12/julia-${JULIA_VERSION}-linux-x86_64.tar.gz && \
     tar -xzf julia-${JULIA_VERSION}-linux-x86_64.tar.gz && \
     mv julia-${JULIA_VERSION} ${JULIA_PATH} && \
     rm julia-${JULIA_VERSION}-linux-x86_64.tar.gz && \
