@@ -1,0 +1,43 @@
+{
+  "name": "SamplerDome Julia Dev Environment",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+
+  // Set the working directory
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+
+  // Configure VS Code settings
+  "customizations": {
+    "vscode": {
+      // Extensions to install
+      "extensions": [
+        "julialang.language-julia"
+      ],
+
+      // Settings
+      "settings": {
+        "julia.executablePath": "/opt/julia/bin/julia",
+        "julia.enableTelemetry": false,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  // Features to add (optional: adds common dev tools)
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  // Run commands after container creation
+  "postCreateCommand": "julia --version && echo 'Julia development environment ready!'",
+
+  // Keep container running
+  "overrideCommand": false,
+
+  // User settings
+  "remoteUser": "root"
+}
