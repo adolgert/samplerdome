@@ -4,14 +4,24 @@ FROM ubuntu:24.04
 # Avoid prompts from apt
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install basic dependencies
+# Install basic dependencies and developer tools
 RUN apt-get update && apt-get install -y \
     git \
     curl \
     wget \
     build-essential \
     ca-certificates \
+    ripgrep \
+    fd-find \
+    jq \
+    tree \
+    htop \
+    vim \
+    less \
     && rm -rf /var/lib/apt/lists/*
+
+# Create symlink for fd (installed as fd-find on Ubuntu)
+RUN ln -s $(which fdfind) /usr/local/bin/fd 2>/dev/null || true
 
 # Install Julia 1.12.1 (latest stable as of 2025)
 ENV JULIA_VERSION=1.12.1
